@@ -1,0 +1,126 @@
+
+// HedgeRock Trading Robot
+// Developer: Forex Robot Easy Team
+// Website: forexroboteasy.com
+
+// Include necessary libraries
+#include <Trade\Trade.mqh>
+
+// Define constants
+#define MAX_LOTS 10         // Maximum number of lots to trade
+#define STOP_LOSS 50        // Stop loss in pips
+#define TAKE_PROFIT 100     // Take profit in pips
+#define MARTINGALE_STEP 0.1 // Martingale step size
+
+// Initialize trade object
+CTrade trade;
+
+// Define trade parameters
+double entryPrice = 0;  // Entry price of the hedge position
+double hedgeLots = 0;  // Number of lots for the hedge position
+double profit = 0;     // Current profit of the hedge position
+
+// Open a hedge position
+void OpenHedgePosition()
+{
+    // Get current symbol and price
+    string symbol = Symbol();
+    double currentPrice = MarketInfo(symbol, MODE_BID);
+
+    // Calculate hedge position parameters
+    double hedgePrice = entryPrice + (entryPrice - currentPrice);
+    hedgeLots = NormalizeDouble(trade.Balance() / 10 / hedgePrice, 2);
+
+    // Place hedge trade
+    trade.SellStop(hedgeLots, hedgePrice, 0, 0, 0);
+}
+
+// Manage money management settings
+void MoneyManagement()
+{
+    // Get current account balance
+    double balance = trade.Balance();
+
+    // Adjust lot size based on account balance
+    if (balance < 1000)
+        trade.SetVolume(MAX_LOTS * 0.5);
+    else if (balance < 5000)
+        trade.SetVolume(MAX_LOTS * 0.75);
+    else
+        trade.SetVolume(MAX_LOTS);
+}
+
+// Implement Martingale feature
+void Martingale()
+{
+    // Increase lot size by Martingale step
+    hedgeLots += hedgeLots * MARTINGALE_STEP;
+
+    // Place new hedge trade
+    OpenHedgePosition();
+}
+
+// Check if hedge position should be closed
+bool ShouldCloseHedgePosition()
+{
+    // Calculate current profit
+    double currentProfit = trade.Profit();
+
+    // Check if take profit or stop loss is reached
+    if (currentProfit >= TAKE_PROFIT || currentProfit <= -STOP_LOSS)
+        return true;
+
+    return false;
+}
+
+// Close the hedge position
+void CloseHedgePosition()
+{
+    // Close all open hedge trades
+    trade.CloseAll();
+
+    // Reset trade parameters
+    entryPrice = 0;
+    hedgeLots = 0;
+    profit = 0;
+}
+
+// Main function
+void OnTick()
+{
+    // Check if hedge position is open
+    if (entryPrice != 0)
+    {
+        // Check if hedge position should be closed
+        if (ShouldCloseHedgePosition())
+            CloseHedgePosition();
+    }
+    else
+    {
+        // Open new hedge position
+        OpenHedgePosition();
+    }
+}
+
+// Initialize the trading robot
+void OnInit()
+{
+    // Set initial trade parameters
+    entryPrice = MarketInfo(Symbol(), MODE_BID);
+    hedgeLots = trade.Volume();
+
+    // Set stop loss and take profit levels
+    trade.SetDeviationInPoints(10);
+    trade.SetStopLoss(STOP_LOSS);
+    trade.SetTakeProfit(TAKE_PROFIT);
+
+    // Enable automatic money management
+    MoneyManagement();
+}
+
+// Clean up resources
+void OnDeinit(const int reason)
+{
+    // Close any open hedge positions
+    CloseHedgePosition();
+}
